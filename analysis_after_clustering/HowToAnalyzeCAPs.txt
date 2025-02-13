@@ -1,0 +1,19 @@
+Once the CAPs are obtained running the codes in 'kmeans'
+
+1. Run(‘ConvertMasksToMNI.m’) to obtain the GM and WM mask in MNI space per dataset
+
+2. The SVM classification is performed by running 'SVM_classification.m'. This code not only computes and saves
+	the mean accuracy of the SVM but also the confusion matrices and the average signal per CAP.
+
+3. The feature extraction is performed by running first 'SVM_feature_1.m' which explores several threshold for 
+	the CBR in order to optimize it. 'SVM_feature_2.m' uses the threshold given the best accuracy to 
+	obtain the final feature ranking.
+
+	The folder 'SVM-RFE-CBR-v1.3' containing the SVM-RFE code needs to be
+	downloaded on https://ch.mathworks.com/matlabcentral/fileexchange/50701-feature-selection-with-svm-rfe
+
+4. To plot the confusion matrices, use the code 'plotConfusionMatrices.m'
+
+5. To plot the heatmaps, use the code 'plotHeatmaps.m'
+
+6. The code 'CAP_analysis.m' extracts and plots the frame distribution and the CAPs occurence.
