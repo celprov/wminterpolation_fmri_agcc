@@ -14,10 +14,12 @@ Furthermore, we identified the most important white matter bundles and gray matt
 	into the white matter
 
 - `kmeans` contains the code in order to perform the clustering and obtain the PCC-seed CAPs
-- `WholeBrainCaps` contains the code to obtain whole-brain CAPs
 
-- All the analysis performed on the CAPs are contained in `analysis_after_clustering`
-	including the feature selection using SVM-RFE and the classification using SVM
+- All the analysis performed on the CAPs and reported in the paper are contained in `analysis_after_clustering`.
+
+- On top of the analysis reported in the paper, during my master thesis I performed a few exploratory analysis,
+	including feature selection using SVM-RFE and classification using SVM. 
+	Those exploratory analyses are reported in `exploratory_analysis_master_thesis`.
 
 - The folder `data` contains the preprocessed data, the inpainted volumes and the CAPs
 
