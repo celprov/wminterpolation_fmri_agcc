@@ -1,0 +1,413 @@
+---
+title: "Inpainting WM"
+author: "VS"
+date: "2025-03-01"
+output: html_document
+---
+############### Packages
+```{r}
+#### Packages
+
+rm(list = ls()) # clear the workspace
+library(easypackages) # then we can do the rest in one go
+
+# get a list of all potentially useful packages
+list.of.packages <- c("Hmisc","ggplot2","caret","gplots","Rmisc","dplyr","arsenal","lme4",
+                      "MatchIt","optmatch","data.table","plotrix","ggthemes","car",
+                      "viridis","coin","plyr","psytabs","RColorBrewer","boot",
+                      "msir","lmtest", "ggpubr","stats", "reshape2","xtable",
+                      "ez","apa","parallel", "jmuOutlier","Rtsne","fpc", "cluster",
+                      "RCurl","foreach","doParallel", "gridExtra","cowplot","rtf",
+                      "mokken","psytabs","MKinfer","variancePartition","dplyr","plyr",
+                      "scales","ggpubr","ggbeeswarm","tableone","lmerTest")
+
+# check if they are already installed and otherwise install them
+#new.packages <- list.of.packages[!(list.of.packages %in% #installed.packages()[,"Package"])]
+#if(length(new.packages)>0) { install.packages(new.packages)}
+
+# then load them all
+libraries(list.of.packages)
+rm(list.of.packages, new.packages)
+```
+
+###################### Load Data & organise data
+```{r data, echo=TRUE}
+
+# Frame distribution data
+frame <-read.csv("/Users/van/kDrive/2025.02_Céline_Impainting/02.Van/FrameDistribution.csv",header = TRUE, sep = ",",na.string = "NA",stringsAsFactors = F) 
+
+# Occurence rate data
+occurence <-read.csv("/Users/van/kDrive/2025.02_Céline_Impainting/02.Van/OccurenceRate.csv",header = TRUE, sep = ",",na.string = "NA",stringsAsFactors = F) 
+
+# WM activity data per subjects
+wm <-read.csv("/Users/van/kDrive/2025.02_Céline_Impainting/02.Van/AvgWM_all.csv",header = TRUE, sep = ",",na.string = "NA",stringsAsFactors = F) 
+
+# Factors for bayesian tests
+wm$group1 <- factor(wm$group1)
+wm$group2 <- factor(wm$group2)
+wm$group3 <- factor(wm$group3)
+wm$group4 <- factor(wm$group4)
+
+```
+
+###################### Plot Frame Distribution
+```{r data, echo=TRUE}
+
+# Load necessary libraries
+library(ggplot2)
+library(tidyr)
+library(dplyr)
+
+# Convert from wide to long format
+data_long <- frame %>%
+  pivot_longer(cols = c(b_TDC, a_C_AgCC, c_P_AgCC), names_to = "Group", values_to = "Percentage")
+
+
+#Colors - color-blind friendly
+
+group_colors <- c("b_TDC" = "#682677",  # Dark Purple
+                  "a_C_AgCC" = "#0077B6",  # Blue
+                  "c_P_AgCC" = "#F6E045")  # Yellow-Green
+
+
+# Create the stacked bar plot
+distribution <- ggplot(data_long, aes(x = in.cap, y = Percentage, fill = Group)) +
+  geom_bar(stat = "identity", position = "dodge") +  # Change "stack" to "dodge"
+  scale_fill_manual(values = group_colors, labels = c("Partial AgCC","Complete AgCC","TDC")) +
+  theme_minimal() +
+  theme(legend.position = "none") +
+  theme(
+    plot.title = element_text(face = "bold"),
+    axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1)
+  ) +
+  labs(
+    title = "Distribution within in-CAPs",
+    x = NULL,
+    y = "in-CAPs Percentage",
+    fill = "Group") 
+
+```
+
+###################### Chi-Square of Frame Distribution - 3 groups comparison
+```{r data, echo=TRUE}
+
+data <- frame[, -1]
+results <- apply(data, 1, function(x) chisq.test(x))
+results
+
+# Extract the Chi-square statistic and p-value
+chi_squared <- sapply(results, function(res) res$statistic)
+p_values <- sapply(results, function(res) res$p.value)
+
+# Apply multiple comparisons correction
+fdr_corrected <- p.adjust(p_values, method = "fdr")
+bonferroni_corrected <- p.adjust(p_values, method = "bonferroni")
+
+# Create a summary table with the results
+summary_table <- data.frame(
+  Incap = 1:8,                     # Row numbers (incaps)
+  Chi_squared = chi_squared,       # Chi-square statistic
+  P_value = p_values,              # Raw p-values
+  FDR_corrected = fdr_corrected,   # FDR corrected p-values
+  Bonferroni_corrected = bonferroni_corrected  # Bonferroni corrected p-values
+)
+
+# Save to CSV
+write.csv(summary_table, "/Users/van/kDrive/2025.02_Céline_Impainting/02.Van/01.GroupCompaisonsResults/ChiSquare_frameDistribution.csv", row.names = FALSE)
+
+###### Post-hoc testing 
+# Extract data for in-CAP2 (second row)
+in_cap2_data <- data[7, c("TDC", "C_AgCC")]
+in_cap2_data <- data[7, c("TDC", "P_AgCC")]
+in_cap2_data <- data[7, c("P_AgCC", "C_AgCC")]
+
+# Create a contingency table for TDC vs C_AgCC for in-CAP2
+contingency_table <- matrix(in_cap2_data, nrow = 1, byrow = TRUE)
+chisq.test(in_cap2_data)
+
+
+```
+
+###################### Plot Frame Contribution
+```{r data, echo=TRUE}
+
+library(gridExtra)
+
+# Plot for TDC
+plot_TDC <- ggplot(contrib, aes(x = in.CAP, y = TDC)) +
+  geom_bar(stat = "identity", fill = "#682677") +
+  theme_minimal() +
+  labs(title = "TDC", x = "", y = "Nbr of frames contributing (%)") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1),
+        plot.title = element_text(face = "bold"))
+
+# Plot for AgCC_C
+plot_AgCC_C <- ggplot(contrib, aes(x = in.CAP, y = AgCC_C)) +
+  geom_bar(stat = "identity", fill = "#0077B6") +
+  theme_minimal() +
+  labs(title = "Complete AgCC", x = "", y = "Nbr of frames contributing (%)") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1),
+        plot.title = element_text(face = "bold"))
+
+# Plot for AgCC_P
+plot_AgCC_P <- ggplot(contrib, aes(x = in.CAP, y = AgCC_P)) +
+  geom_bar(stat = "identity", fill = "#F6E045") +
+  theme_minimal() +
+  labs(title = "Partial AgCC", x = "", y = "Nbr of frames contributing (%)") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1),
+        plot.title = element_text(face = "bold"))
+
+grid.arrange(distribution, plot_TDC, plot_AgCC_C, plot_AgCC_P, nrow = 1)
+
+```
+
+###################### Bayesian Mann Witney Test - WM correspondance
+```{r data, echo=TRUE}
+
+library(BayesFactor)
+library(dplyr)
+library(DFBA)
+
+
+# Function to compute Bayesian Wilcoxon test and report summary statistics
+compute_bayesian_manwitney <- function(data, group_var, hypotheses) {
+  
+  results <- list()
+  
+  # Get all measure names (excluding the group variable)
+measure_names <- setdiff(names(data), group_var)
+
+  for (measure in measure_names) {
+    
+    # Select relevant data & remove missing values
+    df <- data %>% dplyr::select(all_of(c(group_var, measure))) %>% na.omit()
+    
+    # Ensure the group variable is a factor
+    df[[group_var]] <- as.factor(df[[group_var]])
+    
+    # Define hypothesis direction
+    if (measure %in% names(hypotheses)) {
+      direction <- hypotheses[[measure]]
+    } else {
+      direction <- "TDC ≠ AgCC"  # Default to two-sided test
+    }
+    
+    # Separate data into two groups
+    group1 <- df %>% filter(.data[[group_var]] == "1") %>% pull(measure)
+    group2 <- df %>% filter(.data[[group_var]] == "2") %>% pull(measure)
+    
+    # Perform Bayesian Wilcoxon test using dfba_wilcoxon
+    test_result <- dfba_mann_whitney(group1, group2)
+    
+    # Extract Bayes Factor
+    bf_value <- test_result$BF10
+    
+    # Compute summary statistics
+    group_stats <- df %>%
+      group_by(!!sym(group_var)) %>%
+      summarise(
+        Mean = mean(.data[[measure]], na.rm = TRUE),
+        SD = sd(.data[[measure]], na.rm = TRUE),
+        Median = median(.data[[measure]], na.rm = TRUE),
+        .groups = "drop"
+      )
+    
+    # Interpret Bayes Factor
+    bf_interpretation <- case_when(
+      bf_value < 1 ~ "Evidence for Null (no difference)",
+      bf_value >= 1 & bf_value < 3 ~ "Weak evidence for Alternative",
+      bf_value >= 3 & bf_value < 10 ~ "Moderate evidence for Alternative",
+      bf_value >= 10 & bf_value < 30 ~ "Strong evidence for Alternative",
+      bf_value >= 30 & bf_value < 100 ~ "Very strong evidence for Alternative",
+      bf_value >= 100 ~ "Decisive evidence for Alternative"
+    )
+    
+    # Store results
+    results[[measure]] <- tibble(
+      Measure = measure,
+      Group_Comparison = "TDC vs AgCC",
+      #Alternative_Hypothesis = direction,
+      BayesFactor = bf_value,
+      Interpretation = bf_interpretation,
+      Mean_TDC = group_stats$Mean[group_stats[[group_var]] == "1"],
+      SD_TDC = group_stats$SD[group_stats[[group_var]] == "1"],
+      Median_TDC = group_stats$Median[group_stats[[group_var]] == "1"],
+      Mean_AgCC = group_stats$Mean[group_stats[[group_var]] == "2"],
+      SD_AgCC = group_stats$SD[group_stats[[group_var]] == "2"],
+      Median_AgCC = group_stats$Median[group_stats[[group_var]] == "2"]
+    )
+  }
+  
+  # Combine results into a single table
+  return(bind_rows(results))
+}
+
+# Define specific directional hypotheses (modify as needed)
+hypotheses_list <- list()
+
+#Select colmns of interest in dataframe
+wm_group3 <- wm[, -c(1, 2, 3, 4, 6)]
+wm_group4 <- wm[, -c(1, 2, 3, 4, 5)]
+
+
+# Run Bayesian rank-based comparisons
+bayes_manwitney_WM_agccC <- compute_bayesian_manwitney(wm_group3, "group3", hypotheses_list)
+bayes_manwitney_WM_agccP <- compute_bayesian_manwitney(wm_group4, "group4", hypotheses_list)
+
+# Save to CSV
+write.csv(bayes_manwitney_WM_agccC,"/Users/van/kDrive/2025.02_Céline_Impainting/02.Van/01.GroupCompaisonsResults/bayes_manwitneyn_WM_agccC.csv", row.names = FALSE)
+write.csv(bayes_manwitney_WM_agccP,"/Users/van/kDrive/2025.02_Céline_Impainting/02.Van/01.GroupCompaisonsResults/bayesmanwitneyn_WM_agccP.csv", row.names = FALSE)
+
+```
+
+###################### Occurences - Bayesian Mann Witney Test 
+```{r data, echo=TRUE}
+
+library(BayesFactor)
+library(dplyr)
+library(DFBA)
+
+# factor variable
+occurence$group2 <- factor(occurence$group2)
+occurence$group3 <- factor(occurence$group3)
+
+# Function to compute Bayesian Mann Witney test and report summary statistics 
+compute_bayesian_manwitney <- function(data, group_var, hypotheses) {
+  
+  results <- list()
+  
+  # Get all measure names (excluding the group variable)
+measure_names <- setdiff(names(data), group_var)
+
+  for (measure in measure_names) {
+    
+    # Select relevant data & remove missing values
+    df <- data %>% dplyr::select(all_of(c(group_var, measure))) %>% na.omit()
+    
+    # Ensure the group variable is a factor
+    df[[group_var]] <- as.factor(df[[group_var]])
+    
+    # Define hypothesis direction
+    if (measure %in% names(hypotheses)) {
+      direction <- hypotheses[[measure]]
+    } else {
+      direction <- "TDC ≠ AgCC"  # Default to two-sided test
+    }
+    
+    # Separate data into two groups
+    group1 <- df %>% filter(.data[[group_var]] == "1") %>% pull(measure)
+    group2 <- df %>% filter(.data[[group_var]] == "2") %>% pull(measure)
+    
+    # Perform Bayesian Wilcoxon test using dfba_wilcoxon
+    test_result <- dfba_mann_whitney(group1, group2)
+    
+    # Extract Bayes Factor
+    bf_value <- test_result$BF10
+    
+    # Compute summary statistics
+    group_stats <- df %>%
+      group_by(!!sym(group_var)) %>%
+      summarise(
+        Mean = mean(.data[[measure]], na.rm = TRUE),
+        SD = sd(.data[[measure]], na.rm = TRUE),
+        Median = median(.data[[measure]], na.rm = TRUE),
+        .groups = "drop"
+      )
+    
+    # Interpret Bayes Factor
+    bf_interpretation <- case_when(
+      bf_value < 1 ~ "Evidence for Null (no difference)",
+      bf_value >= 1 & bf_value < 3 ~ "Weak evidence for Alternative",
+      bf_value >= 3 & bf_value < 10 ~ "Moderate evidence for Alternative",
+      bf_value >= 10 & bf_value < 30 ~ "Strong evidence for Alternative",
+      bf_value >= 30 & bf_value < 100 ~ "Very strong evidence for Alternative",
+      bf_value >= 100 ~ "Decisive evidence for Alternative"
+    )
+    
+    # Store results
+    results[[measure]] <- tibble(
+      Measure = measure,
+      Group_Comparison = "TDC vs AgCC",
+      #Alternative_Hypothesis = direction,
+      BayesFactor = bf_value,
+      Interpretation = bf_interpretation,
+      Mean_TDC = group_stats$Mean[group_stats[[group_var]] == "1"],
+      SD_TDC = group_stats$SD[group_stats[[group_var]] == "1"],
+      Median_TDC = group_stats$Median[group_stats[[group_var]] == "1"],
+      Mean_AgCC = group_stats$Mean[group_stats[[group_var]] == "2"],
+      SD_AgCC = group_stats$SD[group_stats[[group_var]] == "2"],
+      Median_AgCC = group_stats$Median[group_stats[[group_var]] == "2"]
+    )
+  }
+  
+  # Combine results into a single table
+  return(bind_rows(results))
+}
+
+# Define specific directional hypotheses (modify as needed)
+hypotheses_list <- list()
+
+
+#Select colmns of interest in dataframe
+occurence_group2 <- occurence[, -c(1, 3)]
+occurence_group3 <- occurence[, -c(1, 2)]
+
+# Run Bayesian rank-based comparisons
+bayes_manwitney_occurence_agccC <- compute_bayesian_manwitney(occurence_group2, "group2", hypotheses_list)
+bayes_manwitney_occurence_agccP <- compute_bayesian_manwitney(occurence_group3, "group3", hypotheses_list)
+
+```
+
+###################### Illustration Bayesian mann witney
+```{r data, echo=TRUE}
+
+
+# Load required libraries
+library(tibble)
+library(tidyr)
+library(ggplot2)
+library(viridis)
+library(readr)
+library(dplyr)
+
+# Illustration results from the bayesian group comparison on WM contribution - takes BF for each #WMcorrespondance to each in-CAPs in complete and partial AgCC in comparison to TDC
+
+data <-read.csv("/Users/van/kDrive/2025.02_Céline_Impainting/02.Van/01.GroupCompaisonsResults/bayesmanwitneyn_WM_agccC_illustration.csv",header = TRUE, sep = ",",na.string = "NA",stringsAsFactors = F)
+
+data <-read.csv("/Users/van/kDrive/2025.02_Céline_Impainting/02.Van/01.GroupCompaisonsResults/bayesmanwitneyn_WM_agccP_illutration.csv",header = TRUE, sep = ",",na.string = "NA",stringsAsFactors = F)
+
+# Ensure data is a dataframe
+data <- as.data.frame(data)
+
+# Convert the first column (in-CAP) to character or factor to avoid type mismatch
+data <- data %>%
+  mutate(across(1, as.character))
+
+# Rename first column for easier handling
+colnames(data)[1] <- "CAP"
+
+# Convert data to long format
+data_long <- data %>%
+  pivot_longer(cols = -CAP, names_to = "Region", values_to = "Value")
+
+# Plot heatmap AGCC Complete WM & GM
+ggplot(data_long, aes(x = Region, y = CAP, fill = Value)) +
+  geom_tile() +
+  scale_fill_viridis(option = "viridis", name = "BF10", trans = "log", 
+                     breaks = c(10, 40, 100, 500, 1000, 5400)) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1)) +
+  labs(title = "Group comparison: TDC - Complete AgCC", x = "GM regions", y = "in-CAPs")+
+  guides(fill = guide_colorbar()) 
+
+# Plot heatmap AGCC Partial WM & GM
+ggplot(data_long, aes(x = Region, y = CAP, fill = Value)) +
+  geom_tile() +
+  scale_fill_viridis(option = "viridis", name = "BF10", trans = "log", 
+                     breaks = c(1,10, 40, 100, 200, 300)) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1))+
+  labs(title = "Group comparison: TDC - Partial AgCC", x = "GM regions", y = "in-CAPs")+
+  guides(fill = guide_colorbar())
+
+```
