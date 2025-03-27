@@ -20,6 +20,7 @@ Furthermore, we identified the most important white matter bundles and gray matt
 - On top of the analysis reported in the paper, during my master thesis I performed a few exploratory analysis,
 	including feature selection using SVM-RFE and classification using SVM. 
 	Those exploratory analyses are reported in `exploratory_analysis_master_thesis`.
+  	Additionally, I started to work on generating whole-brain CAPs to expand the analysis beyond the DMN-related CAPs.
 
 - The folder `data` contains the preprocessed data, the inpainted volumes and the CAPs
 
