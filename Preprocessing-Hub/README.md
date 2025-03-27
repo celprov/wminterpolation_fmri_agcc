@@ -1,4 +1,5 @@
-# Copying the original files to your own folder
+# How to preprocess the data
+## Copying the original files to your own folder
 1. Run `arrange_data.m` and adapt the paths to your own needs
 
 OR
@@ -6,7 +7,7 @@ OR
 1. Run `OrganizeNifti.m` to reorganize the emplacement of the nifti files
 
 
-# Preprocessing
+## Preprocessing
 
 1. Run `pp12Main.m` using the options {'reset','realign','QC','coregReslice','segment'}  
 	with parameters {'QCcoef',1.5,'coregDirection','FtoS','refMeanFunc',...
